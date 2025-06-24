@@ -54,7 +54,7 @@ dimpleTimer = 1
 downNodes = []
 upNodes = []
 
-name = "PlumTreeDIMPLE/PlumTree + DIMPLE" + str(args.total_nodes)+'-Seed'+str(args.seedR)+'-ShuffleTime'+str(args.shuffleTime)+'-LOOKAHEAD'+str(args.lookahead)
+name = "PlumTreeDIMPLE/PlumTree + DIMPLE" + str(args.total_nodes)+'-Seed'+str(args.seedR)+'-ShuffleTime'+str(args.shuffleTime)+'-LOOKAHEAD'+str(args.lookahead)+'-CHURN'+str(args.activeChurn)
 
 simName, startTime, endTime, minDelay, useMPI, mpiLib = name, 0, args.endtime, 0.00001, uMPI, "/usr/lib/x86_64-linux-gnu/libmpich.so"
 simianEngine = Simian(simName, startTime, endTime, minDelay, useMPI)
@@ -254,10 +254,11 @@ class Node(simianEngine.Entity):
         self.missing = []
         self.receivedMsgs = {}
         self.timers = []
+        self.timersAck = {}
 
         #Report Variables
         self.report = {}
-        self.timersAck = {}
+
 
         #DIMPLE Variables
         self.partial_view = []
@@ -268,7 +269,7 @@ class Node(simianEngine.Entity):
             peer_ids = random.sample([i for i in range(3) if i != self.node_idx], 2)
             for peer_id in peer_ids:
                 visited_list = [peer_id, self.node_idx]  # Simulate movement between them
-                self.partial_view.append(partialViewEntry(peer_id, 0, visited_list))    
+                self.partial_view.append(partialViewEntry(peer_id, 0, list(visited_list)))    
                 self.reqService( delay2 + 1 , "DimpleShuffle", "none")  
         else:
             contactNode = 0 
@@ -651,15 +652,19 @@ class Node(simianEngine.Entity):
 
             # Fill empty slots in partial_view
             if len(self.partial_view) < maxPartialView:
-                received_entry.visited.append(self.node_idx)
-                self.partial_view.append(received_entry)
+                new_visited = received_entry.visited.copy()
+                new_visited.append(self.node_idx)
+                new_entry = partialViewEntry(received_entry.node_idx, 0, new_visited)
+                self.partial_view.append(new_entry)
                 break
 
             # Replace entries that were sent to Q (i.e., not updated)
             for i, e in enumerate(self.partial_view):    
                 if any(entry.node_idx == e.node_idx for entry in sent_subset):
-                    received_entry.visited.append(self.node_idx)
-                    self.partial_view[i] = received_entry
+                    new_visited = received_entry.visited.copy()
+                    new_visited.append(self.node_idx)
+                    new_entry = partialViewEntry(received_entry.node_idx, 0, new_visited)
+                    self.partial_view[i] = new_entry
             
         self.UpdatePlumTreePeers()
 
@@ -685,7 +690,6 @@ class Node(simianEngine.Entity):
  #--------------------------------------- TRIGGERS ---------------------------------------------------#   
       
     def TriggerSystemReport(self,*args):
-            
         report = []
         degree = len(self.eagerPushPeers)+len(self.lazyPushPeers)
         for m in self.receivedMsgs.keys():
@@ -713,8 +717,7 @@ class Node(simianEngine.Entity):
                 downNodes.append(self.node_idx)
 
     def create_transaction(self,*args):
-        idx = random.randrange(len(upNodes))
-        n = upNodes[idx]
+        n = random.choice(upNodes)
         avg_transactionT = .7
         delay = random.expovariate(1/avg_transactionT)
         if self.active and not self.miner:
@@ -743,8 +746,7 @@ for i in range(0, math.ceil((0.01 * nodes))):
     simianEngine.schedService(lookahead, "BecomeMiner", "", "Node", n)
     upNodes.remove(n)
 
-idx = random.randrange(len(upNodes))
-n = upNodes[idx]
+n = random.choice(upNodes)
 
 simianEngine.schedService(50 + lookahead , "create_transaction","" , "Node", n)
 

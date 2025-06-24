@@ -826,8 +826,7 @@ class Node(simianEngine.Entity):
                 downNodes.append(self.node_idx)
 
     def create_transaction(self,*args):
-        idx = random.randrange(len(upNodes))
-        n = upNodes[idx]
+        n = random.choice(upNodes)
         avg_transactionT = .7
         delay = random.expovariate(1/avg_transactionT)
         if self.active and not self.miner:
@@ -856,8 +855,7 @@ for i in range(0, math.ceil((0.01 * nodes))):
     simianEngine.schedService(lookahead, "BecomeMiner", "", "Node", n)
     upNodes.remove(n)
 
-idx = random.randrange(len(upNodes))
-n = upNodes[idx]
+n = random.choice(upNodes)
 
 simianEngine.schedService(50 + lookahead , "create_transaction","" , "Node", n)
 
