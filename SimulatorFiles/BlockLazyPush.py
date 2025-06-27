@@ -12,8 +12,8 @@ parser.add_argument('endtime', metavar='ENDTIME', type=float,
                     help='simulation end time')
 parser.add_argument('--seedR', type=int, metavar='SEED', default=10, 
                     help='seed for random')
-parser.add_argument("-d", "--distance", type=float, metavar='DISTANCE', default=100.0, 
-                    help="maximum distance to be neighbors")
+#parser.add_argument("-d", "--distance", type=float, metavar='DISTANCE', default=100.0, 
+#                    help="maximum distance to be neighbors")
 parser.add_argument("-l", "--lookahead", type=float, metavar='LOOKAHEAD', default=0.1, 
                     help="min delay of mailboxes")
 parser.add_argument("-r", "--maxrounds", type=int, default=math.inf, 
@@ -37,7 +37,9 @@ if args.useMPI == 1:
 nodes = args.total_nodes
 lookahead = args.lookahead
 maxrounds = args.maxrounds
-fanout = math.floor(math.log(args.total_nodes,10) + 1) * 6 
+maxActiveView = math.ceil(math.log(args.total_nodes,10)) + 1
+maxPassiveView = math.ceil(math.log(args.total_nodes,10) + 1) * 6
+fanout = maxActiveView + maxPassiveView
 random.seed(args.seedR)
 churn = args.activeChurn
 failRate = args.failRate
@@ -45,7 +47,7 @@ failRate = args.failRate
 downNodes = []
 upNodes = []
 
-name = "LazyPushSimulation/"+"LazyPush"+ str(args.total_nodes)+'-Seed'+str(args.seedR)+'-LOOKAHEAD'+str(args.lookahead)
+name = "LazyPushSimulation/"+"LazyPush"+ str(args.total_nodes)+'-Seed'+str(args.seedR)+'-LOOKAHEAD'+str(args.lookahead)+'-CHURN'+str(args.activeChurn)
 
 simName, startTime, endTime, minDelay, useMPI, mpiLib = name, 0, args.endtime, 0.00001, uMPI, "/usr/lib/x86_64-linux-gnu/libmpich.so"
 simianEngine = Simian(simName, startTime, endTime, minDelay, useMPI)
@@ -54,7 +56,8 @@ simianEngine = Simian(simName, startTime, endTime, minDelay, useMPI)
 positions = []
 # Calculate the grid size
 grid_size = math.ceil(math.sqrt(nodes))
-spacing = 60
+spacing = math.ceil(math.sqrt(nodes))
+distance = spacing * 2.5
 
 # Place nodes in the grid
 for i in range(nodes):
@@ -317,37 +320,21 @@ class Node(simianEngine.Entity):
     
 
     def GetPeers(self):
-        lsize = int(math.sqrt(args.total_nodes))
-        idx = self.node_idx
-        xp = idx // lsize
-        yp = idx % lsize
+        xp, yp = positions[self.node_idx]
+        self.peers = []
 
-        rxmin = xp - 2
-        rxmax = xp + 2
-        rymin = yp - 2
-        rymax = yp + 2
+        for peer in range(self.total_nodes):
+            if peer == self.node_idx:
+                continue
+            x, y = positions[peer]
+            d = math.dist((xp, yp), (x, y))  # Python ≥3.8
+            if d < distance:
+                self.peers.append(peer)
 
-        if rxmin < 0:
-            rxmin = 0
-        if rxmax > lsize:
-            rxmax = lsize
-        if rymin < 0:
-            rymin = 0
-        if rymax > lsize:
-            rymax = lsize
-        
-        
-        for x in range(rxmin, rxmax):
-            for y in range(rymin, rymax):
-                peer = (x * lsize) + y
-                v1 = positions[self.node_idx][0] - positions[peer][0]
-                v2 = positions[self.node_idx][1] - positions[peer][1]
-                dist = math.sqrt(v1 * v1 + v2 * v2)
-                if peer != self.node_idx and dist < args.distance:
-                    self.peers.append(peer)
-        random.shuffle(self.peers)
-        
-        self.peers = self.peers[0:fanout]
+        # Randomize and reduce to fanout
+        if len(self.peers) > fanout:
+            self.peers = random.sample(self.peers, fanout)
+
 
 
     def TriggerSystemReport(self,*args):
@@ -363,6 +350,9 @@ class Node(simianEngine.Entity):
     def UpdatePeers(self, *args):
         self.GetPeers()
         self.reqService(30, "UpdatePeers", "none")
+
+    def BecomeMiner(self, *args):
+        self.miner = True  
 
     def force_churn_out(self, *args):
         if self.active:
@@ -380,14 +370,13 @@ class Node(simianEngine.Entity):
                 downNodes.append(self.node_idx)
 
     def create_transaction(self,*args):
-        idx = random.randrange(len(upNodes))
-        n = upNodes[idx]
+        n = random.choice(upNodes)
         avg_transactionT = .7
         delay = random.expovariate(1/avg_transactionT)
         if self.active and not self.miner:
             transaction = Transaction(self.node_idx)
-            tx_msg = msgGossip('BROADCAST',"TRX", transaction, transaction.trans_id, 0, self.node_idx)
-            self.reqService(lookahead, "PlumTreeGossip", tx_msg, "Node", self.node_idx)
+            tx_msg = msg2("TRX", transaction, transaction.trans_id, 0, self.node_idx)
+            self.reqService(lookahead, "Receive", tx_msg, "Node", self.node_idx)
             self.trxMade += 1
             self.reqService(delay , "create_transaction", "" , "Node", n)
         else:
@@ -410,8 +399,7 @@ for i in range(0, math.ceil((0.01 * nodes))):
     simianEngine.schedService(lookahead, "BecomeMiner", "", "Node", n)
     upNodes.remove(n)
 
-idx = random.randrange(len(upNodes))
-n = upNodes[idx]
+n = random.choice(upNodes)
 
 simianEngine.schedService(50 + lookahead , "create_transaction","" , "Node", n)
 

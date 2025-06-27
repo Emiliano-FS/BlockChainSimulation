@@ -583,7 +583,6 @@ class Node(simianEngine.Entity):
     
     def BecomeMiner(self, *args):
         self.miner = True
-        print("A am a miner")
 
     def force_churn_out(self, *args):
         if self.active:

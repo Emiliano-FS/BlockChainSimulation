@@ -105,7 +105,6 @@ class Blockchain:
     def block_validity(self, block, proof):
 
         if not Blockchain.is_valid_proof(block, proof):
-            print("It failed the Proof ?????  ")
             return False
         
         return True
@@ -134,13 +133,10 @@ class Blockchain:
         block.nonce = 0
 
         computed_hash = block.compute_hash()
-        print("Intentando hacer el Proof of work para " + str(block.index))
-        #print(computed_hash)
         while not computed_hash.startswith('0' * Blockchain.difficulty):
             block.nonce += 1
             computed_hash = block.compute_hash()
 
-        print("Lo encontre despues de " + str(block.nonce))
         return computed_hash
 
     def add_new_transaction(self, transaction):
@@ -174,7 +170,7 @@ class Blockchain:
     
             # Explicit comparison
             if computed_hash != block.hash or previous_hash != block.previous_hash:
-                print(f"[INVALID BLOCK] index={block.index}, expected_hash={computed_hash}, got={block.hash}")
+                #print(f"[INVALID BLOCK] index={block.index}, expected_hash={computed_hash}, got={block.hash}")
                 result = False
                 break
 
@@ -198,8 +194,6 @@ class Blockchain:
                           timestamp=time.time(),
                           previous_hash=last_block.hash)
         
-        print("Cree el bloque "+ str(new_block.index))
-
         proof = self.proof_of_work(new_block)
 
         if Blockchain.is_valid_proof(new_block, proof):
@@ -213,7 +207,7 @@ class Blockchain:
     def consensus(self, block):
         # Step 1: Validate block hash and PoW
         if not self.block_validity(block, block.hash):
-            print(f"❌ Invalid block {block.index}")
+           #print(f"❌ Invalid block {block.index}")
             return False
 
         # Step 2: Normal chain extension
@@ -226,7 +220,7 @@ class Blockchain:
 
         # Step 3: Extends an existing fork
         elif block.previous_hash in self.forks:
-            print(f"🔀 Block {block.index} extends known fork")
+            #print(f"🔀 Block {block.index} extends known fork")
             self.forks[block.previous_hash][0].append(block)
             self.forks[block.hash] = self.forks.pop(block.previous_hash)
             self.resolve_forks()
@@ -238,14 +232,14 @@ class Blockchain:
         elif block.previous_hash in self.chain_hashes():
             base_index = self.chain_index(block.previous_hash)
             self.forks[block.hash] = ([block], base_index)
-            print(f"🌱 New fork started at block {block.index}")
+            #print(f"🌱 New fork started at block {block.index}")
             self.remove_if_orphan(block)
             self.try_attach_orphans()
             return True
 
         # Step 5: Orphan block (no parent known yet)
         else:
-            print(f"🧩 Orphan block received: {block.index}")
+            #print(f"🧩 Orphan block received: {block.index}")
             if block not in self.orphans:
                 self.orphans.append(block)
             return False
@@ -260,7 +254,7 @@ class Blockchain:
 
         if len(longest_chain) > len(self.chain) + 1:
             self.chain = longest_chain
-            print("Fork resolved — replaced with longer fork")
+            #print("Fork resolved — replaced with longer fork")
 
 
     def remove_if_orphan(self, block):
@@ -279,7 +273,7 @@ class Blockchain:
     
         # Remove attached orphans
         if reattachable:
-            print(f"🔁 Reattached {len(reattachable)} orphan(s)")
+            #print(f"🔁 Reattached {len(reattachable)} orphan(s)")
             self.orphans = [o for o in self.orphans if o not in reattachable]
 
 

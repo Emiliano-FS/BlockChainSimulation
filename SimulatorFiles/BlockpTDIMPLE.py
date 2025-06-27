@@ -48,7 +48,9 @@ delayLazy = 1
 # DIMPLE variables
 shuffleTime = args.shuffleTime
 shuffleSize = math.floor(math.log(nodes,10)) 
-maxPartialView = math.floor(math.log(nodes,10) + 1) * 6 
+maxActiveView = math.ceil(math.log(args.total_nodes,10)) + 1
+maxPassiveView = math.ceil(math.log(args.total_nodes,10) + 1) * 6
+maxPartialView = maxActiveView + maxPassiveView
 dimpleTimer = 1
 
 downNodes = []
@@ -642,31 +644,26 @@ class Node(simianEngine.Entity):
 
 
     def ExchangeProcedure(self, received_subset, sent_subset):
-        # Helper: get all node IDs in the current view for fast lookup
         current_ids = {entry.node_idx for entry in self.partial_view}
-
+    
         for received_entry in received_subset:
-            # Ignore if it's self or already in view
             if received_entry.node_idx == self.node_idx or received_entry.node_idx in current_ids:
                 continue
-
-            # Fill empty slots in partial_view
+            
+            new_visited = received_entry.visited.copy()
+            new_visited.append(self.node_idx)
+            new_entry = partialViewEntry(received_entry.node_idx, 0, new_visited)
+    
             if len(self.partial_view) < maxPartialView:
-                new_visited = received_entry.visited.copy()
-                new_visited.append(self.node_idx)
-                new_entry = partialViewEntry(received_entry.node_idx, 0, new_visited)
                 self.partial_view.append(new_entry)
                 break
-
-            # Replace entries that were sent to Q (i.e., not updated)
-            for i, e in enumerate(self.partial_view):    
-                if any(entry.node_idx == e.node_idx for entry in sent_subset):
-                    new_visited = received_entry.visited.copy()
-                    new_visited.append(self.node_idx)
-                    new_entry = partialViewEntry(received_entry.node_idx, 0, new_visited)
-                    self.partial_view[i] = new_entry
             
+            for i, e in enumerate(self.partial_view):
+                if any(entry.node_idx == e.node_idx for entry in sent_subset):
+                    self.partial_view[i] = new_entry
+    
         self.UpdatePlumTreePeers()
+
 
     def NodeFailure(self, node_id):
         self.partial_view = [entry for entry in self.partial_view if entry.node_idx != node_id]
@@ -699,7 +696,6 @@ class Node(simianEngine.Entity):
 
     def BecomeMiner(self, *args):
         self.miner = True
-        print("A am a miner")
 
     def force_churn_out(self, *args):
         if self.active:
